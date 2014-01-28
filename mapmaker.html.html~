@@ -1,0 +1,717 @@
+    <!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>LR MMO</title>
+  </head>
+<style>
+  #input {
+    border-radius: 2px; 
+    border: 1px solid #000000;
+    margin-top: 10px; 
+    padding: 5px; 
+    width: 480%;  
+    background: rgba(0, 0, 0, 0);
+      outline: none
+  }
+  #user {
+    border-radius: 2px; 
+    border: 1px solid #000000;
+    margin-top: 10px; 
+    padding: 5px; 
+    background: rgba(0, 0, 0, 0);
+    outline: none
+  }
+  #pass {
+    border-radius: 2px; 
+    border: 1px solid #000000;
+    margin-top: 10px; 
+    padding: 5px;
+    background: rgba(0, 0, 0, 0);
+    outline: nonexx
+  }
+#chatMessageSendBox {
+    width: 100%;
+    height: 64px;
+    position: absolute;
+    float: right;
+    right: 0;
+    bottom: 256px;
+    z-index: 1;
+    background-color: rgba(255, 255, 255, 0);
+    font-family: Calibri
+  }
+  #chatBox {
+    width: 30%;
+    height: 64px;
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 1;
+    overflow: scroll;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    background-color: rgba(255, 255, 255, 0);
+    font-family: Calibri;
+    text-shadow: 1px 1px #000000;
+    font-size: 16px; 
+    color: white;
+    line-height:8px
+  }
+  </style>
+<body style="margin: 0; padding: 0; overflow: hidden" >
+<div id="loading" style="position: absolute; height: 100%; width: 100%">
+<img src="Resources/LoadingScreen.jpg" width=100% height=100%/>
+<div style="position: absolute; top: 20px; width: 100%">
+<p style="color: white; font-family: Calibri; font-size: 18px; text-align: center">Loading textures...</p><img src="Resources/Loading.gif" style="display: block; margin-left: auto; margin-right: auto; top: 10px"/>
+      </div>
+<div style="position: absolute; top: 0px; right: 20px; color: white; font-family: Calibri; font-size:18px">
+<p>By Luca Jegard and Reece Lecrivain 2013</p>
+      </div>
+    </div>
+<div id="chatBox">
+<div id="content" style="position: absolute; height: 100%; width: 100%; left: 10px">
+<br>
+<img src="Resources/Icon_Loading.gif"/>
+<b>Connecting to server</b>
+    </div>
+    </div>
+<div id="chatMessageSendBox" style="width:30%; left:10px; bottom:41.5%; height:14%">
+<div style="position: absolute; height: 20%; width: 20.6%; left: 10px">
+<span id="status"></span>
+    <textarea id="maptext" style="width:450%; height:200pt; background-color: rgba(255, 255, 255, 0);"/></textarea>
+      </div>
+    </div>
+    
+
+
+<div id="errorBox" style="position: absolute; bottom:0px; width:100%; height:278px; background: rgba(0, 0, 0, 0.6)">
+<h1 style="font-family: Calibri; font-size:48px; text-align: center; color: white">Lost connection to server...</h1>
+<p style="font-family: Calibri; font-size:32px; text-align: center; color: grey">Attempting re-connect...</p>
+<img id="reconnectProgress" src="Resources/Image_ReconnectProgress.png" style="position: absolute; left:40%; width:0%; top: 190px; height: 32px">
+<img src="Resources/Image_ReconnectProgressOuter.png" style="position: absolute; left:40%; width:20%; top: 184px">
+    </div>
+<script src="JQuery.js"></script>
+<script src="Three.min.js"></script>
+<script src="Detector.js"></script>
+    <script src="stats.min.js"></script>
+    <script src="dat.gui.min.js"></script>
+    <script src="OrbitControls.js"></script>
+    <script src="ColladaLoader.js"></script>
+    <script src="jquery-ui.js"></script>
+    <script src="fonts/helvetiker_regular.typeface.js"></script>
+    <link rel="stylesheet" href="jquery-ui.css" />
+<script type='text/javascript' src="dat.gui.min.js"></script>
+<!--Cloud test-->
+<script id="vs" type="x-shader/x-vertex">
+    
+            varying vec2 vUv;
+
+            void main() {
+		
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+		
+            }
+
+        </script>
+    
+<script id="fs" type="x-shader/x-fragment">
+    
+            uniform sampler2D map;
+
+            uniform vec3 fogColor;
+            uniform float fogNear;
+            uniform float fogFar;
+
+            varying vec2 vUv;
+
+            void main() {
+		
+                float depth = gl_FragCoord.z / gl_FragCoord.w;
+                float fogFactor = smoothstep( fogNear, fogFar, depth );
+		
+                gl_FragColor = texture2D( map, vUv );
+                gl_FragColor.w *= pow( gl_FragCoord.z, 20.0 );
+                gl_FragColor = mix( gl_FragColor, vec4( fogColor, gl_FragColor.w ), fogFactor );
+		
+            }
+
+        </script>
+<!--Cloud test end-->
+<script>
+    // Copyright Luca Jegard and Reece Lecrivain 2013
+    // FOR TRANSPARENT TEXTURE USE PNG AND TRANSPARENT CONSTRUCTOR
+    //new THREE.MeshPhongMaterial({map: texture, transparent: true})
+    if (!Detector.webgl) Detector.addGetWebGLMessage();
+
+var clipList = new Array();
+var heightmap = new Array();
+var map = new Array();
+var isLoading = true, isMovingLeft = false, isMovingRight = false, isMovingUp=false,isMovingDown=false;
+var isMovingForward = false, isMovingBackward = false, isUsingChat = false;
+var isConnectionReady = false, isLoggedIn = false, isDebugMode = true, isError = false;
+var isCordConnectionReady = false, isLeftMouseButtonDown = false, isRightMouseButtonDown = false;
+var objectsLoaded = 0;
+var container, stats;
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
+var renderer = new THREE.WebGLRenderer( {antialias:true} );
+renderer.shadowMapEnabled = true;
+renderer.shadowMapSoft = true;
+var ambientLight = new THREE.AmbientLight(0xCCCCCC);
+var gui;
+var parameters, parameters2, parameters3, parameters4;
+
+var sprite1;
+var canvas1, context1, texture1;
+
+// The sun
+var light  = new THREE.SpotLight( 0xffffff );
+light.position.set(256, 500, 256);
+light.target.position.set(0, 0, 0);
+light.shadowCameraVisible = true;
+
+light.castShadow = true;
+
+light.shadowMapWidth = 1024;
+light.shadowMapHeight = 1024;
+
+light.shadowCameraNear = 500;
+light.shadowCameraFar = 4000;
+light.shadowCameraFov = 30;
+light.onlyShadow = true;
+
+scene.add( light );
+
+var loader = new THREE.JSONLoader();
+var time = 0.2;
+var textureList = new Array(), meshList = new Array(), objectList = new Array();
+var isObjectNear = new Array();
+var players = new Array();
+var isPlayerOnScene = new Array();
+var player;
+var isMapDownloaded = false;
+var playerName;
+var shadow = new THREE.Color( 0x505050 );
+var user;
+var sendCord;
+var controls = new THREE.OrbitControls( camera, renderer.domElement );
+var serverAddress = "ws://192.168.1.4:1337";
+var reconnectAttempts = 0;
+var timeScale = 0.00005;
+var skybox;
+var orbitToggle=true;
+var spritey = new Array();
+// Create the player
+player = new THREE.Mesh(new THREE.CubeGeometry(1, 2, 1), new THREE.MeshPhongMaterial({shading: THREE.SmoothShading, transparent: true}));
+player.castShadow = true;
+player.receiveShadow = true;
+player.position.set(100, -2, 100);
+
+placeHoldCube = new THREE.Mesh(new THREE.CubeGeometry(10,10,10), new THREE.MeshBasicMaterial( { color: 0x00ee00, wireframe: true, transparent: true } ));
+placeHoldCube.position.set(20,2,10);
+
+$(document).ready(function (){
+    $('#user').click(function(){
+        $('#user').focus();
+    });
+    $('#pass').click(function(){
+        $('#pass').focus();
+    });
+    $('#maptext').click(function(){
+	$('#maptext').focus();
+    });
+    $(document).keypress(function(e){
+	if(e.which == 13){
+	    runMapScript($('#maptext').val());
+	}
+    });
+});
+function runMapScript(script){
+	eval(script);
+}
+// Initialise called on start
+init();
+//createGrass(44, 88, 512, 512,-3,0,10);
+function init() {
+    // Set the scene fog
+    scene.fog = new THREE.Fog( 0xcce0ff, 85, 512);
+    
+    // Projector to handle world/screen calculations
+    projector = new THREE.Projector();
+    
+    // Hide the chat box
+    $('#chatBox').hide();
+    
+    // Hide the error box
+    $('#errorBox').hide();
+    
+    // Set the renderer size and apend the dom element
+    renderer.setSize(window.innerWidth, window.innerHeight); 
+    document.body.appendChild(renderer.domElement);    
+    
+            // FPS and latency counter
+            container = document.createElement('div');
+            document.body.appendChild(container);
+            stats = new Stats();
+            stats.domElement.style.position = 'absolute';
+            stats.domElement.style.top = '0px';
+            container.appendChild(stats.domElement);
+    
+    
+    
+    // Load the textures
+    textureList["Hut"] = THREE.ImageUtils.loadTexture('Resources/Texture_Hut.png', null, load);
+    textureList["Church"] = THREE.ImageUtils.loadTexture('Resources/Texture_Church.png', null, load);
+    textureList["RespawnPoint"] = THREE.ImageUtils.loadTexture('Resources/Texture_RespawnPoint.jpg', null, load);
+    textureList["Well"] = THREE.ImageUtils.loadTexture('Resources/Texture_Well.png', null, load);
+    textureList["WitchHut"] = THREE.ImageUtils.loadTexture('Resources/Texture_WitchHut.png', null, load);
+    textureList["Tower"] = THREE.ImageUtils.loadTexture('Resources/Texture_Tower.png', null, load);
+    textureList["RockA"] = THREE.ImageUtils.loadTexture('Resources/Texture_Rock.png', null, load);
+    textureList["RockB"] = THREE.ImageUtils.loadTexture('Resources/Texture_Rock.png', null, load);
+    textureList["RockC"] = THREE.ImageUtils.loadTexture('Resources/Texture_Rock.png', null, load);
+    textureList["FarmHouse"] = THREE.ImageUtils.loadTexture('Resources/Texture_FarmHouse.png', null, load);
+    textureList["HouseA"] = THREE.ImageUtils.loadTexture('Resources/Texture_HouseA.png', null, load);
+    textureList["HouseC"] = THREE.ImageUtils.loadTexture('Resources/Texture_HouseC.png', null, load);
+    textureList["HouseD"] = THREE.ImageUtils.loadTexture('Resources/Texture_HouseD.png', null, load);
+    textureList["HouseE"] = THREE.ImageUtils.loadTexture('Resources/Texture_HouseE.png', null, load);
+    textureList["HouseF"] = THREE.ImageUtils.loadTexture('Resources/Texture_HouseF.png', null, load);
+    textureList["Pavillon"] = THREE.ImageUtils.loadTexture('Resources/Texture_Pavillon.png', null, load);
+    textureList["Road"] = THREE.ImageUtils.loadTexture('Resources/Texture_Road.gif', null, load);
+    textureList["Grass"] = THREE.ImageUtils.loadTexture('Resources/Texture_Grass.jpg', null, load);
+    textureList["SkyBoxTropicalARight"] = THREE.ImageUtils.loadTexture('Resources/SkyBoxes/Right_TropicalA.jpg', null, load);
+    textureList["SkyBoxTropicalALeft"] = THREE.ImageUtils.loadTexture('Resources/SkyBoxes/Left_TropicalA.jpg', null, load);
+    textureList["SkyBoxTropicalATop"] = THREE.ImageUtils.loadTexture('Resources/SkyBoxes/Top_TropicalA.jpg', null, load);
+    textureList["SkyBoxTropicalABottom"] = THREE.ImageUtils.loadTexture('Resources/SkyBoxes/Bottom_TropicalA.jpg', null, load);
+    textureList["SkyBoxTropicalAFront"] = THREE.ImageUtils.loadTexture('Resources/SkyBoxes/Front_TropicalA.jpg', null, load);
+    textureList["SkyBoxTropicalABack"] = THREE.ImageUtils.loadTexture('Resources/SkyBoxes/Back_TropicalA.jpg', null, load);
+    
+    // Load the meshes
+    new THREE.JSONLoader().load('Resources/Model_Hut.js', function (geo) {meshList["Hut"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_Church.js', function (geo) {meshList["Church"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_RespawnPoint.js', function (geo) {meshList["RespawnPoint"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_Well.js', function (geo) {meshList["Well"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_WitchHut.js', function (geo) {meshList["WitchHut"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_Tower.js', function (geo) {meshList["Tower"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_RockA.js', function (geo) {meshList["RockA"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_RockB.js', function (geo) {meshList["RockB"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_RockC.js', function (geo) {meshList["RockC"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_FarmHouse.js', function (geo) {meshList["FarmHouse"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_HouseA.js', function (geo) {meshList["HouseA"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_HouseC.js', function (geo) {meshList["HouseC"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_HouseD.js', function (geo) {meshList["HouseD"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_HouseE.js', function (geo) {meshList["HouseE"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_HouseF.js', function (geo) {meshList["HouseF"] = geo; load();});
+    new THREE.JSONLoader().load('Resources/Model_Pavillon.js', function (geo) {meshList["Pavillon"] = geo; load();});
+    
+    
+    //declare gui
+    gui = new dat.GUI();
+    var folder1 = gui.addFolder("basicObjects");
+    var folder2 = gui.addFolder("editBasicObjects");
+    var folder3 = gui.addFolder("terrain");
+    var folder4 = gui.addFolder("clippingBlocks");
+    parameters = {
+        newObject:"Hut", ID:"object",includeClipping:false, x:0, y:0, z:0, rotation:0, scale:1, texture_repeat:1, create_object: function(){ createObjectInput() }
+    };
+    parameters2 = {
+	objectID:"ID",x:0,y:0,z:0,rotation:0,scale:1
+	,deleteObject:function(){removeBasicObject()}
+    };
+    parameters3 = {
+	hideClips:false,objectName:"Hut",createClip:function(){createClippingBlock()},x:0,y:0,z:0,rotation:0,
+	scaleX:1,scaleY:1,scaleZ:1,deleteClip:function(){removeClip()}
+    };
+    parameters4= {
+        planeName:"plane",createPlane:function(){createPlane},x:0,y:0,z:0,rotationX:0,rotationY:0,rotationZ:0,
+        scaleX:1,scaleY:1,scaleZ:1,Texture:"Grass",deletePlane:function(){removePlane()},vertices:10,
+	randomVertices:false,verticesRandRange:1,VerNum:0,VerX:0,VerY:0,VerZ:0;
+    };
+    folder1.add(parameters, 'newObject', ["Hut","Church","RespawnPoint","Well","WitchHut","Tower","RockA","RockB","RockC","FarmHouse","HouseA","HouseC","HouseD","HouseE","HouseF","Pavillon"]).name("newObject").listen();
+    folder1.add(parameters, 'ID');
+    folder1.add(parameters, 'x',-256,256).onChange(function(value){placeHoldCube.position.x = value});
+    folder1.add(parameters, 'y',-256,256).onChange(function(value){placeHoldCube.position.y = value});
+    folder1.add(parameters, 'z',-256,256).onChange(function(value){placeHoldCube.position.z = value});
+    folder1.add(parameters, 'rotation',-Math.PI,Math.PI).onChange(function(value){placeHoldCube.rotation.y = value});
+    folder1.add(parameters, 'scale', 0,100);
+    folder1.add(parameters, 'texture_repeat', 0,200);
+    folder1.add(parameters, 'create_object');
+    
+    folder2.add(parameters2,'objectID');
+    folder2.add(parameters2, "x",-256,256).onChange(function(value){objectList[parameters2.objectID].position.x=value; spritey[parameters2.objectID].position.x=value});
+    folder2.add(parameters2, "y",-256,256).onChange(function(value){objectList[parameters2.objectID].position.y=value; spritey[parameters2.objectID].position.y=value});
+    folder2.add(parameters2, "z",-256,256).onChange(function(value){objectList[parameters2.objectID].position.z=value; spritey[parameters2.objectID].position.z=value});
+    folder2.add(parameters2, 'rotation',-Math.PI,Math.PI).onChange(function(value){objectList[parameters2.objectID].rotation.y = value});
+    folder2.add(parameters2, 'scale', 0,100).onChange(function(value){objectList[parameters2.objectID].scale.set(value,value,value); spritey[parameters2.objectID].position.y=(value*2+6)});
+    folder2.add(parameters2,'deleteObject');
+    
+    folder4.add(parameters3, 'hideClips');
+    folder4.add(parameters3, 'objectName');
+    folder4.add(parameters3, 'createClip');
+    folder4.add(parameters3, 'x',-256,256).onChange(function(value){clipList[parameters3.objectName].position.x=value; spritey[parameters3.objectName].position.x=value});
+    folder4.add(parameters3, 'y',-256,256).onChange(function(value){clipList[parameters3.objectName].position.y=value; spritey[parameters3.objectName].position.y=value});
+    folder4.add(parameters3, 'z',-256,256).onChange(function(value){clipList[parameters3.objectName].position.z=value; spritey[parameters3.objectName].position.z=value});
+    folder4.add(parameters3, 'rotation',-Math.PI,Math.PI).onChange(function(value){clipList[parameters3.objectName].rotation.y=value});
+    folder4.add(parameters3, 'scaleX',0,100).onChange(function(value){clipList[parameters3.objectName].scale.x=value});
+    folder4.add(parameters3, 'scaleY',0,100).onChange(function(value){clipList[parameters3.objectName].scale.y=value; spritey[parameters3.objectName].position.y=value});
+    folder4.add(parameters3, 'scaleZ',0,100).onChange(function(value){clipList[parameters3.objectName].scale.z=value});
+    folder4.add(parameters3, 'deleteClip');
+    
+    function createClippingBlock(){
+        clipList[parameters3.objectName] = new THREE.Mesh(new THREE.CubeGeometry(parameters3.scaleX, parameters3.scaleY,parameters3.scaleZ), new THREE.MeshBasicMaterial({color: 'red', wireframe: true, tranparent:true}));
+        clipList[parameters3.objectName].position.set(parameters3.x, parameters3.y, parameters3.z);
+        scene.add(clipList[parameters3.objectName]);
+
+        spritey[parameters3.objectName] = makeTextSprite( parameters3.objectName,{ fontsize: 32, fontface: "Georgia", borderColor: {r:0, g:0, b:255, a:1.0} } );
+        spritey[parameters3.objectName].position.set(parameters3.x, parameters3.y+6, parameters3.z);
+        scene.add( spritey[parameters3.objectName] );
+    }
+    function createObjectInput(){
+	createBasicObject(parameters.ID,parameters.newObject,parameters.x,parameters.y,parameters.z,parameters.rotation,parameters.scale, parameters.texture_repeat);
+    }
+    function removeBasicObject(){
+	scene.remove(objectList[parameters2.objectID]);
+	objectList[parameters2.objectID] = null;
+        scene.remove(spritey[parameters2.objectID]);
+        spritey[parameters2.objectID] = null;
+    }
+    function removeClip(){
+	scene.remove(clipList[parameters3.objectName]);
+	clipList[parameters3.objectName]=null;
+
+        scene.remove(spritey[parameters3.objectName]);
+        spritey[parameters3.objectName] = null;
+    }
+    //createBasicObject(ID, Name, x, y, z, rotation, scale, repeatnum)
+    
+    // Place the map elements
+    //createBasicObject("ReeceHouse", "Hut", 0, 2, 0, 0, 2);
+    //createGrass(44, 88, 512, 512);
+    // Add subtle ambient lighting
+    scene.add(ambientLight);
+    //renderer.setClearColorHex( 0xcce0ff, 1 );
+    
+    // Add directional light source
+    var directionalLight = new THREE.DirectionalLight(0xCCCCCC);
+    directionalLight.position.set(1, 1, 1).normalize();
+    scene.add(directionalLight);
+    
+    // Add the event listeners
+    document.addEventListener('keydown', onDocumentKeyDown, false );
+    document.addEventListener('keyup', onDocumentKeyUp, false );  
+    document.addEventListener('mousedown', onMouseButtonDown, false );
+    document.addEventListener('mouseup', onMouseButtonUp, false );
+    window.addEventListener('resize', onWindowResize, false );
+    document.addEventListener('mousemove', onDocumentMouseMove, false );
+}
+
+// Draw an object on the scene
+function createBasicObject(ID, Name, x, y, z, rotation, scale, repeatnum) {    
+    texture = textureList[Name];
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(repeatnum, repeatnum);
+    material = new THREE.MeshPhongMaterial({shading: THREE.SmoothShading, map: texture, transparent: true});
+    objectList[ID] = new THREE.Mesh(meshList[Name], material);
+    objectList[ID].position.set(x, y, z);
+    objectList[ID].scale.set(scale, scale, scale);
+    objectList[ID].overdraw = true;
+    objectList[ID].rotation.y = rotation;
+    objectList[ID].doubleSided = true;
+    objectList[ID].name = ID;
+    scene.add(objectList[ID]);
+    objectList[ID].castShadow = true;
+    objectList[ID].receiveShadow = true;
+    
+    spritey[ID] = makeTextSprite( ID,{ fontsize: 32, fontface: "Georgia", borderColor: {r:0, g:0, b:255, a:1.0} } );
+    spritey[ID].position.set(x-5,y+10,z);
+    scene.add( spritey[ID] );
+}
+// Draw a road plane on the scene
+function createRoad(x, z, w, h){
+    roadTexture = textureList["Road"];
+    roadTexture.wrapS = roadTexture.wrapT = THREE.RepeatWrapping;
+    roadTexture.repeat.set(100, 100);
+    material = new THREE.MeshPhongMaterial({shading: THREE.SmoothShading, map: roadTexture });
+    //new THREE.MeshBasicMaterial({color: color})
+    var plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
+    plane.overdraw = true;
+    plane.position.set(x, -2.99, z);
+    plane.rotation.z = Math.PI / 2;
+    plane.rotation.x = -Math.PI / 2;
+    plane.castShadow = true;
+    plane.receiveShadow = true;
+    scene.add(plane);
+}
+
+function makeTextSprite( message, parameters )
+{
+    if ( parameters === undefined ) parameters = {};
+    
+    var fontface = parameters.hasOwnProperty("fontface") ? 
+        parameters["fontface"] : "Arial";
+    
+    var fontsize = parameters.hasOwnProperty("fontsize") ? 
+        parameters["fontsize"] : 18;
+    
+    var borderThickness = parameters.hasOwnProperty("borderThickness") ? 
+        parameters["borderThickness"] : 4;
+    
+    var borderColor = parameters.hasOwnProperty("borderColor") ?
+        parameters["borderColor"] : { r:0, g:0, b:0, a:1.0 };
+    
+    var backgroundColor = parameters.hasOwnProperty("backgroundColor") ?
+        parameters["backgroundColor"] : { r:255, g:255, b:255, a:1.0 };
+
+    var spriteAlignment = THREE.SpriteAlignment.topLeft;
+    
+    var canvas = document.createElement('canvas');
+    var context = canvas.getContext('2d');
+    context.font = "Bold " + fontsize + "px " + fontface;
+    
+    // get size data (height depends only on font size)
+    var metrics = context.measureText( message );
+    var textWidth = metrics.width;
+    
+    // background color
+    context.fillStyle   = "rgba(" + backgroundColor.r + "," + backgroundColor.g + ","
+        + backgroundColor.b + "," + backgroundColor.a + ")";
+    // border color
+    context.strokeStyle = "rgba(" + borderColor.r + "," + borderColor.g + ","
+        + borderColor.b + "," + borderColor.a + ")";
+
+    context.lineWidth = borderThickness;
+    //roundRect(context, borderThickness/2, borderThickness/2, textWidth + borderThickness, fontsize * 1.4 + borderThickness, 6);
+    // 1.4 is extra height factor for text below baseline: g,j,p,q.
+    
+    // text color
+    context.fillStyle = "rgba(0, 0, 0, 1.0)";
+    
+    context.fillText( message, borderThickness, fontsize + borderThickness);
+    
+    // canvas contents will be used for a texture
+    var texture = new THREE.Texture(canvas) 
+    texture.needsUpdate = true;
+
+    var spriteMaterial = new THREE.SpriteMaterial( 
+        { map: texture, useScreenCoordinates: false, alignment: spriteAlignment } );
+    var sprite = new THREE.Sprite( spriteMaterial );
+    sprite.scale.set(10,5,1.0);
+    return sprite;	
+}
+
+
+
+//create wireframe plane for map help
+var geoPlane = new THREE.PlaneGeometry(512,512,69,69);
+var geoMat = new THREE.MeshBasicMaterial({wireframe: true});
+var helpPlane = new THREE.Mesh( geoPlane,geoMat );
+helpPlane.applyMatrix( new THREE.Matrix4().makeRotationX( - Math.PI / 2 ) );
+helpPlane.position.set(0,-3,0);
+helpPlane.name="floor";
+scene.add(helpPlane);
+// Draw a grass plane on the scene
+function createPlane(x, z, w, h, y,r,s){
+    texture = textureList["Grass"];
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(40, 40);
+    material = new THREE.MeshPhongMaterial({shading: THREE.SmoothShading, map: texture });
+    //new THREE.MeshBasicMaterial({color: color})//plane geometry takes 4 arguments w,h and the last 2 are the
+    //amount of segments on x and y
+    var prePlane =new THREE.PlaneGeometry(w, h, w-1,h-1);
+    for(var i =0; i < (prePlane.vertices).length; i++){
+	prePlane.vertices[i].z=(Math.random()*s);
+    }
+    var plane = new THREE.Mesh(prePlane, material);
+    plane.overdraw = true;
+    plane.applyMatrix( new THREE.Matrix4().makeRotationX( - Math.PI / 2 ) );
+    plane.position.set(x,y,z);
+    plane.castShadow = true;
+    plane.rotation.set.y=r;
+    plane.receiveShadow = true;
+    scene.add(plane);
+}
+
+function createSkybox() {
+    var materialArray = [];
+    materialArray.push(new THREE.MeshBasicMaterial( { map: textureList["SkyBoxTropicalARight"], fog: false }));
+    materialArray.push(new THREE.MeshBasicMaterial( { map: textureList["SkyBoxTropicalALeft"], fog: false }));
+    materialArray.push(new THREE.MeshBasicMaterial( { map: textureList["SkyBoxTropicalATop"], fog: false }));
+    materialArray.push(new THREE.MeshBasicMaterial( { map: textureList["SkyBoxTropicalABottom"], fog: false }));
+    materialArray.push(new THREE.MeshBasicMaterial( { map: textureList["SkyBoxTropicalAFront"], fog: false }));
+    materialArray.push(new THREE.MeshBasicMaterial( { map: textureList["SkyBoxTropicalABack"], fog: false }));
+    for (var i = 0; i < 6; i++) materialArray[i].side = THREE.BackSide;
+    var skyboxMaterial = new THREE.MeshFaceMaterial(materialArray);
+    var skyboxGeom = new THREE.CubeGeometry(2048, 2048, 2048, 1, 1, 1);
+    skybox = new THREE.Mesh( skyboxGeom, skyboxMaterial );
+    skybox.color = 0x00ffff;
+    skybox.fog = false;
+    skybox.name="skybox";
+    scene.add( skybox );    
+}
+
+
+createSkybox();
+
+// Default camera position
+scene.add(player);
+scene.add(placeHoldCube);
+player.add(camera);      
+camera.position.y += 30;
+
+// Mouse button down listener
+function onMouseButtonDown( event ) {
+    if (event.button == 0) isLeftMouseButtonDown = true;
+    if (event.button == 2) isRightMouseButtonDown = true;
+}
+
+// Mouse button up listener
+function onMouseButtonUp( event ) {
+    if (event.button == 0) isLeftMouseButtonDown = false;
+    if (event.button == 2) isRightMouseButtonDown = false;
+}
+
+// Key down listener
+function onDocumentKeyDown( event ) {
+    if (isUsingChat) return;
+    switch ( event.keyCode ) {
+	// A or Left Arrow
+    case 37: isMovingLeft = true; break;
+    case 65: isMovingLeft = true; break;
+	// D or Right Arrow
+    case 39: isMovingRight = true; break;
+    case 68: isMovingRight = true; break;
+	// S or Down Arrow
+    case 40: isMovingBackward = true; break;
+    case 83: isMovingBackward = true; break;
+	// W or Up Arrow
+    case 38: isMovingForward = true; break;
+    case 87: isMovingForward = true; break;
+	//Q or E
+    case 81: isMovingUp = true; break;
+    case 69: isMovingDown = true; break;
+	
+    }
+}
+
+// Key up listener
+function onDocumentKeyUp( event ) {
+    if(!isUsingChat) {
+        switch ( event.keyCode ) {
+        // A or Left Arrow
+        case 37: isMovingLeft = false; break;
+        case 65: isMovingLeft = false; break;
+        // D or Right Arrow
+        case 39: isMovingRight = false; break;
+        case 68: isMovingRight = false; break;
+        // S or Down Arrow
+        case 40: isMovingBackward = false; break;
+        case 83: isMovingBackward = false; break;
+        // W or Up Arrow
+        case 38: isMovingForward = false; break;
+        case 87: isMovingForward = false; break;
+            //Q or E
+        case 81: isMovingUp = false; break;
+        case 69: isMovingDown = false; break;
+        }
+    }
+}
+
+// Window resize listener
+function onWindowResize() {
+    renderer.setSize(window.innerWidth, window.innerHeight); 
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+}
+
+function render() {
+    // Request animation frame
+    requestAnimationFrame(render);
+    
+    // Update controls, stats and render
+    if ((isLoggedIn && isMapDownloaded) || isDebugMode) {
+        controls.update();
+        if (stats != null) stats.update();
+        renderer.render(scene, camera);
+    }
+    
+
+    
+} 
+
+// Called when an object is loaded
+function load() {
+    objectsLoaded += 1;
+    if (objectsLoaded >= (meshList.length + textureList.length)) {
+        // Called when all objects are loaded
+        if (document.getElementById('loading') != null) {
+            var el = document.getElementById('loading');
+            var remElement = (el.parentNode).removeChild(el);
+            isLoading = false;
+        }
+    }
+}
+
+// Round a number
+function round(a){
+    var b = Math.round(a * 100) / 100;
+    return b;
+}
+
+movement();
+function movement(){
+    setInterval(function(){
+        if (isError) return;
+        if(isMovingRight && !isMovingLeft) {
+            player.rotation.y -= 0.08;
+        }
+        if(isMovingLeft && !isMovingRight) {
+            player.rotation.y += 0.08;
+        }
+        if((isMovingForward || (isLeftMouseButtonDown && isRightMouseButtonDown)) && !isMovingBackward) {
+            player.translateZ(-0.5);
+        }
+        if(isMovingBackward && !isMovingForward) {
+            player.translateZ(0.5);
+        }
+	if(isMovingUp && !isMovingDown){
+	    player.position.y+=0.5;
+        }
+	if(!isMovingUp && isMovingDown){
+            player.position.y-=0.5;
+        }
+        // test
+        //player.position.y = getHeightmapY(256 + Math.round(player.position.x / 10.448979591836734693877551020408), Math.round(player.position.z / 10.448979591836734693877551020408));
+        // end test
+        
+    },33.3);
+}
+// Called when an error occurs
+function errorOccurred() {
+    $('#input').attr('disabled', 'disabled');
+    isConnectionReady = false;
+    isError = true;
+    $('#chatBox').hide();
+    $('#errorBox').show();
+}
+function errorStopped(){
+    $('#input').attr('disabled', 'disabled');//change to eneable plz im not sure about the syntax
+    isConnectionReady = true;
+    isError = true;
+    $('#chatBox').show();
+    $('#errorBox').hide();
+}
+
+function onDocumentMouseMove( event ) 
+{
+    mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+    mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+}
+
+// Call the render loop
+render();
+// Copyright Luca Jegard and Reece Lecrivain 2013
+    </script>
+  </body>
+</html> 
+    
